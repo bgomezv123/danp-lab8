@@ -1,5 +1,5 @@
 /*
-  Proyecto IoT
+Lab08
 Equipo:
 --Gomez Velaco Brian Jospeh
 --Jacobo Castillo Andrew Pold 
@@ -15,69 +15,36 @@ Equipo:
 #include <ArduinoJson.h>
 #include <TimeLib.h>
 
-
-
-
 // Valores para la conexion WiFi
-const char* ssid = "GOMEZ 2,4G";
-const char* password = "holathiago123456789";
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org");
-//AWS este valor se optiene del portal de AWS
+const char* ssid              = "GOMEZ 2,4G";
+const char* password          = "holathiago123456789";
+const int pinLDR              = A0; //Pin A0 que obtiene el valor analogico del sensor
+//Como se usa un led RGB con 4 pines se establecen en variables los pines D5, D6, D7 donde R,G,B respectivamente
+const int redpin              = 13; 
+const int greenpin            = 12 ;
+const int bluepin             = 14;
+//Nombre del topico al cual publicar
+const String topicPublish     = "mobile/mensajes";
+const String topicsubscribe   = "sensor/command";
+//Se establecen los valores para un rango de 30 segundos
+unsigned long tiempoPrevio    = 0; // Variable para almacenar el tiempo previo
+unsigned long intervalo       = 30000;//30000 milisegundos (30 segundos)
+const long utcOffsetInSeconds = -18000; // UTC offset para Colombia (UTC-5, teniendo en cuenta horario de verano)
 
-const int pinLDR = A0;
-bool onOff = true;
-int MODE_LED = 1;
-int R=50;
-int G=50;
-int B=50;
- //MQTT broker ip (EndPoint obtenido del portal AWS)
-const char * AWS_endpoint = "a3brjmyw4c304l-ats.iot.us-east-2.amazonaws.com";
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org",utcOffsetInSeconds); 
+//MQTT broker ip, EndPoint obtenido del Lab08
+const char * AWS_endpoint     = "a3brjmyw4c304l-ats.iot.us-east-2.amazonaws.com";
 
 //CallBack, se imprime en el Monitor Serie el mensaje recivido por el servicio Cloud
-
 void callback(char * topic, byte * payload, unsigned int length) {
-  Serial.print("Message arrived [");
+  Serial.print("Mensaje recibido : [");
   Serial.print(topic);
   Serial.print("] ");
   for (int i = 0; i < length; i++) {
     Serial.print((char) payload[i]);
   }
   Serial.println(topic);
- /**
-  payload[length] = '\0';
-
- 
-  String jsonString = String((char*)payload);
-  DynamicJsonDocument doc(512);
-  deserializeJson(doc, jsonString);
-  int value1 = doc["on_off"];
-  int value2 = doc["mode_led"];
-  int r = doc["r"];
-  int g = doc["g"];
-  int b = doc["b"];
- 
- // Si el valor del payload es 1 se enciende el led, de lo contrario se apaga
-  if(strcmp(topic,"sensor/command")==0){
-    if (value1 == 1) {
-      onOff = true;
-    } else if(value1 == 0) {
-      onOff = false;  
-    } 
-
-    if(value2 == 1){
-      MODE_LED = 1;
-    }else if(value2 == 2){
-      MODE_LED = 2;
-      R=r;
-      G=g;
-      B=b;
-    }
-
-  
-  }
-  **/
- 
 }
 
 WiFiClientSecure espClient;
@@ -182,16 +149,7 @@ void setup() {
   Serial.println(ESP.getFreeHeap());
 }
 
-unsigned long tiempoPrevio = 0; // Variable para almacenar el tiempo previo
-unsigned long intervalo = 1000; 
 
-int redpin = 13; // select the pin for the red LED
-int greenpin = 12 ;// select the pin for the green LED
-int bluepin = 14;
-
-
-const int pinD7 = 13;
-const String topicPublish = "mobile/mensajes";
 void loop() {
   if (!client.connected()) {
     reconnect();
@@ -199,88 +157,47 @@ void loop() {
   // Lee el valor analógico del sensor LDR
   int valorLDR = analogRead(pinLDR);
   client.loop();
-  //De acuerdo al valor analogico del sensor LDR establecemos el nivel de luminosidad del LED
 
-
+  // Obtenemos la fecha y hora actual del NTP 
   time_t epochTime = timeClient.getEpochTime();
-  Serial.print("Epoch Time: ");
-  Serial.println(epochTime);
   struct tm *ptm = gmtime ((time_t *)&epochTime); 
   int monthDay = ptm->tm_mday;
   int currentMonth = ptm->tm_mon+1;
   int currentYear = ptm->tm_year+1900;
   
-  
+  //Concatenamos la fecha y hora actual en Strings
   String currentDate = String(monthDay) + "-" + String(currentMonth) + "-" + String(currentYear);
-  String timeNow =  String(timeClient.getHours()-5)+":"+String(timeClient.getMinutes())+":"+String(timeClient.getSeconds());
-  /***
-     if(onOff){
-      if(valorLDR < 20){
-        analogWrite(pinTX, 0);
-      }else if(valorLDR >= 20 && valorLDR < 50){
-        analogWrite(pinTX, 50);
-      }
-      else if(valorLDR >=50 && valorLDR < 60){
-        analogWrite(pinTX, 200);
-      } else {
-        analogWrite(pinTX,255);
-      }
-  }
-  else{
-    analogWrite(pinTX, 0);
-  }
-  ***/
+  String timeNow =  String(timeClient.getHours())+":"+String(timeClient.getMinutes())+":"+String(timeClient.getSeconds());
 
-  if(MODE_LED == 1){
-     if(onOff){
-      analogWrite(redpin,valorLDR);
-      analogWrite(greenpin,valorLDR);
-      analogWrite(bluepin,valorLDR);
-     }else{
-      analogWrite(redpin,0);
-      analogWrite(greenpin,0);
-      analogWrite(bluepin,0);
-     }
-  }else if(MODE_LED ==2){
-      analogWrite(redpin,R);
-      analogWrite(greenpin,G);
-      analogWrite(bluepin,B);
-  }
-
-
-
-
-
-
+  //De acuerdo al valor analogico del sensor LDR establecemos el nivel de luminosidad del LED   
+  analogWrite(redpin,valorLDR);
+  analogWrite(greenpin,valorLDR);
+  analogWrite(bluepin,valorLDR);
+   
+  //Creamos el objeto JSON para establecer los siguiente valores :
   StaticJsonDocument<128> jsonDoc;
-  // Obtenemos la fecha y hora actual
-  jsonDoc["Timestamp"] = currentDate+", "+timeNow;
+
+  jsonDoc["Timestamp"] = currentDate+", "+timeNow; //Fecha y hora actual del NTP 
   jsonDoc["Value"] = valorLDR;
   jsonDoc["Unit"] = "lux";
-  jsonDoc["Notes"] = topicPublish;
+  jsonDoc["Notes"] = "TEST";
   
-
 
   String jsonString;
   serializeJson(jsonDoc, jsonString);
-  //Contenamoes el siguiente string con el valor del sensor para imprimirlo en el Monitor Serie
-  //char mensaje[50] = "Valor del sensor : ";
-  //char strValorLDR[4];
-  //sprintf(strValorLDR, "%d", valorLDR);
-  //strcat(mensaje, strValorLDR);
-  
    if (millis() - tiempoPrevio >= intervalo) {
       tiempoPrevio = millis();
-      //Publicamos el mensaje del sensor en el servicio Cloud(AWS), con el topico llamado "outTopic"
+      //Publicamos el mensaje del sensor en el servicio Cloud(AWS), con el topico llamado "mobile/mensajes"
       client.publish(topicPublish.c_str(), jsonString.c_str());
       //Imprimimos el mensaje en el monitor serie
       Serial.println(jsonString.c_str());
-   }
- 
-  //Recibimos el mensaje enviado por el servicio cloud (AWS, con el topico llamado "on_off"
-  char recivedMsg = client.subscribe("sensor/command",1);
-  //char mode_led = client.subscribe("mode_led",1);
-  //char rgb_led = client.subscribe("rgb",1);
-  Serial.println(recivedMsg);
 
+   }
+
+
+    //Recibimos el mensaje enviado por el servicio cloud (AWS, con el topico llamado "sensor/command"
+    char recivedMsg = client.subscribe(topicsubscribe.c_str(),1);
+    //Imprimimos el mensaje en el monitor serie
+    Serial.println(recivedMsg);
+ 
 }
